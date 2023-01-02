@@ -15,28 +15,6 @@ Can be run from the command line, with the filename as argument.
 import sys
 import numpy as np
 import pandas as pd
-import json # For config files
-
-   
-#############################################
-# Load configuration
-CONFIG = None
-def load_config(fname):
-    global CONFIG
-
-    with open(fname, "r") as f:
-        CONFIG = json.load(f)
-    print("Loaded configuration\n")
-    #print("    ", CONFIG)
-
-# Load default config
-load_config(r".\py_cull_gauge_config.json")
-
-# Load test config
-def start_test():
-    load_config(r".\py_test_cull_gauge_config_test.json")
-
-#############################################
 
 def _check_dates_dt(ds):
     '''

@@ -2,7 +2,6 @@
 Test code for 'cull_gauge_file'
 '''
 import cull_gauge_file as cgf
-cgf.start_test()
 
 #filename=r"test_data\tiny_test_2.cli"
 #cull_gauge_file(filename, ncull=3, do_export=True)
