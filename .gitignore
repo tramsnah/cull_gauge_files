@@ -21,6 +21,7 @@ input_data/
 working/
 
 # For now, don't commit jupyter
+*.ipynb
 jupyter/
 
 # pictures
