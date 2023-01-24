@@ -6,22 +6,16 @@
 *.xls
 *.xlsx
 
-#Except for test files
-!test_data/*.xlsx 
-!*/test_data/*.xlsx 
+##Except for test files
+#!test_data/*.xlsx 
+#!*/test_data/*.xlsx 
 
 # ignore all pickle files
 *.pkl
 
-# Input/output data folder
-digested_data/
-input_data/
-
-# working
-working/
-
 # For now, don't commit jupyter
 jupyter/
+*.ipynb
 
 # pictures
 *.jpg
