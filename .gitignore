@@ -14,9 +14,9 @@
 *.pkl
 
 # For now, don't commit jupyter
-*.ipynb
 jupyter/
 *.ipynb
+.ipynb_checkpoints/
 
 # pictures
 *.jpg
