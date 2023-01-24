@@ -26,3 +26,7 @@ cgf.cull_gauge_file(filename, ncull=10, do_export=True)
 
 filename=r"test_data\44147.ASC"
 cgf.cull_gauge_file(filename, do_export=True)
+
+filename=r"test_data\60759.tpr"
+cgf.cull_gauge_file(filename, ncull=100, do_export=True)
+

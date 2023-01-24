@@ -13,9 +13,27 @@ Various heuristics are used for this, as well as for the conversion.
 Can be run from the command line, with the filename as argument.
 '''
 import sys
-import numpy as np
-import pandas as pd
+import time
 
+import numpy as np
+import pandas as pd                                                
+
+def timeme(method):
+    '''
+    Decorator to time functions. Uncomment print statement
+    to get results.
+    '''
+    def wrapper(*args, **kw):
+        startTime = int(round(time.time() * 1000))
+        result = method(*args, **kw)
+        endTime = int(round(time.time() * 1000))
+
+        #print(method.__name__, ":", endTime - startTime,'ms')
+        return result
+
+    return wrapper
+
+@timeme
 def _check_dates_dt(ds):
     '''
     Check that the times in the series
@@ -41,6 +59,7 @@ def _check_dates_dt(ds):
 
     return nwrong
 
+@timeme
 def _try_day_month_swap(ds):
     '''
     Working from the assumption that the times in the series
@@ -74,7 +93,8 @@ def _try_day_month_swap(ds):
     else:
         print("        Swapped day/month")
         return date_inv
-    
+
+@timeme
 def _convert_to_dt_robust(ds):
     '''
     Convert strings in series ds to datetime.
@@ -118,6 +138,7 @@ def _convert_to_dt_robust(ds):
     # On the way out, check we did not inadvertently swap day/month
     return _try_day_month_swap(df_dt)
 
+@timeme
 def _check_datetime_cols(df):
     '''
     Convert strings in all columns of dataframe df to datetime (if possible).
@@ -135,43 +156,64 @@ def _check_datetime_cols(df):
     '''
     cols = df.columns
     to_drop = None
-    for i in range(len(cols)):
-        ds = _convert_to_dt_robust(df[cols[i]])
+    c_prev = None
+    for i, c in enumerate(cols):
+        ds = _convert_to_dt_robust(df[c])
         if (i>0 and
                 np.issubdtype(ds.dtype, np.datetime64) and
-                np.issubdtype(df[cols[i-1]].dtype, np.datetime64)):
-            print("        Merging date/time columns", cols[i-1],"and",cols[i])
-            date_as_str = df.iloc[:, i-1].dt.strftime('%d-%b-%y')
-            if (np.issubdtype(df[cols[i]].dtype, np.datetime64)):
-                time_as_str = df.iloc[:, i].dt.strftime('%H:%M:%S.%f')
-            else:
-                time_as_str = df[cols[i]]
+                np.issubdtype(df[c_prev].dtype, np.datetime64)):
+            print("        Merging date/time columns", c_prev,"and",c)
 
-            date_time = date_as_str + " " + time_as_str
-            df_dt = _convert_to_dt_robust(date_time)
+            #eee = df[c_prev][0]
+            d0 = pd.to_datetime("00:00:00")
+            ds -= d0
+            df[c_prev] += ds
+            #fff = df[c_prev][0]
+            #ggg = df[c][0]
 
-            df[cols[i-1]] = df_dt
+            #date_as_str = df.iloc[:, i-1].dt.strftime('%d-%b-%y')
+            #if (np.issubdtype(df[c].dtype, np.datetime64)):
+            #    time_as_str = df.iloc[:, i].dt.strftime('%H:%M:%S.%f')
+            #else:
+            #    time_as_str = df[c]
+            #
+            #date_time = date_as_str + " " + time_as_str
+            #df_dt = _convert_to_dt_robust(date_time)
+            #
+            #df[c_prev] = df_dt
             to_drop = i # Later drop the now redundant time column
         else:
-            df[cols[i]]=ds
+            df[c]=ds
+        c_prev = c
     
     if (to_drop is not None):
         df.drop(cols[to_drop], axis=1, inplace=True)
 
     return df
 
+@timeme
 def _cull_on_column(ds, ncull=100):
     '''
     Return a bool array to be used for selection, based on column c in dataframe df
     In principle one in ncull is selected.
     If the column is numerical, try to capture changes.
     '''
+    # Not a float format, just one in ncull
     if (ds.dtype!=np.float64):
         keep = (ds.index % ncull == 0)
         return keep
         
+    # Estimate at which "dp" we need to make the cut
     dp = np.abs(ds-ds.shift())
     dp0 = np.percentile(dp.dropna(),100*(1-1/ncull))
+
+    # Lots of zeroes? Then ge for simple
+    if (dp0 == 0.0):
+        keep = (ds.index % ncull == 0)
+        return keep
+
+    # Cull on dp0, gradually increase if needed to achieve
+    # the desired cull fraction
     n=len(ds)
     n0=n/ncull
     while(n>n0):
@@ -375,6 +417,10 @@ if (__name__ == "__main__"):
     n_arg = len(sys.argv)
     if (n_arg == 1):
         print ("Utility to cull large gauge files to more manageable proportions")
+        print ("in the form of an Excel file. Usage:")
+        print ("    python ", sys.argv[0], " <filename>")
+        print ("The output Excel file is placed in the same folder as the input file")
+        
     else:
         for i,fname in enumerate(sys.argv):
             if (i>0):
