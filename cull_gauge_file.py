@@ -24,11 +24,11 @@ def timeme(method):
     to get results.
     '''
     def wrapper(*args, **kw):
-        startTime = int(round(time.time() * 1000))
+        start_time = int(round(time.time() * 1000))
         result = method(*args, **kw)
-        endTime = int(round(time.time() * 1000))
+        end_time = int(round(time.time() * 1000))
 
-        #print(method.__name__, ":", endTime - startTime,'ms')
+        #print(method.__name__, ":", end_time - start_time,'ms')
         return result
 
     return wrapper
@@ -47,14 +47,14 @@ def _check_dates_dt(ds):
     dis = ds+np.timedelta64(1, "D")
     dis = dis.shift(1)
     dck = (dis >= ds)
-    dck[0] = True # because of the shift
+    dck[0] = True  # because of the shift
     nwrong = (~dck).sum()
 
     # Down
     dis = ds-np.timedelta64(1, "D")
     dis = dis.shift(1)
     dck = (dis < ds)
-    dck[0] = True # because of the shift
+    dck[0] = True  # because of the shift
     nwrong += (~dck).sum()
 
     return nwrong
@@ -73,21 +73,21 @@ def _try_day_month_swap(ds):
     if (not np.issubdtype(ds.dtype, np.datetime64)):
         return ds
 
-    # Swap day/month. Won't work for all (day# > 12), so fill the gapos
+    # Swap day/month. Won't work for all (day# > 12), so fill the gaps
     # with the original
     date_as_str = ds.dt.strftime('%d-%m-%y %H:%M:%S.%f')
-    date_inv=pd.to_datetime(date_as_str, format='%m-%d-%y %H:%M:%S.%f', errors='coerce')
+    date_inv = pd.to_datetime(date_as_str, format='%m-%d-%y %H:%M:%S.%f', errors='coerce')
     date_inv = date_inv.fillna(ds)
     
-    # Determine # of issues in as-is sries, and in swapped series
+    # Determine # of issues in as-is series, and in swapped series
     n1 = _check_dates_dt(ds)
     n2 = _check_dates_dt(date_inv)
 
     # Return the best
-    if (n1==0 and n2==0):
+    if (n1 == 0 and n2 == 0):
         print("        Cannot distinguish day/month order, kept it the same")
         return ds
-    elif (n1<=n2):
+    elif (n1 <= n2):
         print("        Kept day/month the same")
         return ds
     else:
@@ -109,27 +109,27 @@ def _convert_to_dt_robust(ds):
     Returns modified series.
     '''
     if (np.issubdtype(ds.dtype, np.datetime64)):
-        print("        Column",ds.name,"is already date/time, nothing to do")
+        print("        Column", ds.name, "is already date/time, nothing to do")
         return _try_day_month_swap(ds)
-    elif (ds.dtype!=object):
-        print("        Column",ds.name," is no date/time string")
+    elif (ds.dtype != object):
+        print("        Column", ds.name, " is no date/time string")
         return ds
     
-    # Check for occurences of 24:00:00 (we'll add the 1 day later)
-    ds = ds.copy() # So we can modify oioy
+    # Check for occurrences of 24:00:00 (we'll add the 1 day later)
+    ds = ds.copy()  # So we can modify
     df24 = ds.str.contains("24:00:00")
     n24 = df24.sum()
-    ds[df24] = ds[df24].str.replace("24:00:00","00:00:00")
-    if (n24>0):
-        print("        Column",ds.name,": corrected",n24,"occurences of '24:00:00'")
+    ds[df24] = ds[df24].str.replace("24:00:00", "00:00:00")
+    if (n24 > 0):
+        print("        Column", ds.name, ": corrected", n24, "occurrences of '24:00:00'")
     
     # Convert (or at least try to)
     df_dt = pd.to_datetime(ds, errors='coerce')
     df_fail = df_dt.isnull()
     nfail = df_fail.sum()
     if (nfail > 0):
-        print("        Failed to convert",nfail,"points in column", ds.name,
-                "to date/time,\n", ds[df_fail])
+        print("        Failed to convert", nfail, "points in column", ds.name,
+              "to date/time,\n", ds[df_fail])
         return ds
     
     # Now we add te 1 day
@@ -159,11 +159,15 @@ def _check_datetime_cols(df):
     c_prev = None
     for i, c in enumerate(cols):
         ds = _convert_to_dt_robust(df[c])
-        if (i>0 and
+        if (i > 0 and
                 np.issubdtype(ds.dtype, np.datetime64) and
                 np.issubdtype(df[c_prev].dtype, np.datetime64)):
-            print("        Merging date/time columns", c_prev,"and",c)
+            print("        Merging date/time columns", c_prev, "and", c)
 
+            # At this stage we (can) assume c_prev is a date column, and c is
+            # a time column. Sticking them together as strings, and reparsing
+            # is sometimes very slow. Therefore we convert the time column to a
+            # timedelta, then add it to the date.
             #eee = df[c_prev][0]
             d0 = pd.to_datetime("00:00:00")
             ds -= d0
@@ -183,7 +187,7 @@ def _check_datetime_cols(df):
             #df[c_prev] = df_dt
             to_drop = i # Later drop the now redundant time column
         else:
-            df[c]=ds
+            df[c] = ds
         c_prev = c
     
     if (to_drop is not None):
@@ -199,13 +203,13 @@ def _cull_on_column(ds, ncull=100):
     If the column is numerical, try to capture changes.
     '''
     # Not a float format, just one in ncull
-    if (ds.dtype!=np.float64):
+    if (ds.dtype != np.float64):
         keep = (ds.index % ncull == 0)
         return keep
         
     # Estimate at which "dp" we need to make the cut
     dp = np.abs(ds-ds.shift())
-    dp0 = np.percentile(dp.dropna(),100*(1-1/ncull))
+    dp0 = np.percentile(dp.dropna(), 100*(1-1/ncull))
 
     # Lots of zeroes? Then ge for simple
     if (dp0 == 0.0):
@@ -214,10 +218,10 @@ def _cull_on_column(ds, ncull=100):
 
     # Cull on dp0, gradually increase if needed to achieve
     # the desired cull fraction
-    n=len(ds)
-    n0=n/ncull
-    while(n>n0):
-        keep = (dp>dp0) # Point after
+    n = len(ds)
+    n0 = n/ncull
+    while(n > n0):
+        keep = (dp > dp0) # Point after
         keep |= keep.shift(-1) # Also point before
         dp0 *= 1.1
         n = keep.eq(True).sum()
@@ -230,7 +234,7 @@ def _cull_data(df, ncull=100):
     For numerical columns, try to capture changes.
     If ncull==1, nothing is done.
     '''
-    if (ncull <=1):
+    if (ncull <= 1):
         return df
 
     keep = None
@@ -240,7 +244,7 @@ def _cull_data(df, ncull=100):
             keep = lkeep
         keep |= lkeep
     
-    df_culled =  df[keep]
+    df_culled = df[keep]
     return df_culled
 
 def _read_file(filename, codec, nskiprows, nrows=None, header=None):
@@ -248,7 +252,7 @@ def _read_file(filename, codec, nskiprows, nrows=None, header=None):
     Helper function to pandas.read_csv, with a (mostly) fixed set of argyments
     '''
     #xtraargs={"delim_whitespace": True}
-    xtraargs={"sep": None}
+    xtraargs = {"sep": None}
 
     df = pd.read_csv(filename, header=header, skiprows=nskiprows, nrows=nrows, 
                 encoding=codec, infer_datetime_format=True,
@@ -260,7 +264,7 @@ def _find_codec(filename, npeekrows=20):
     '''
     Peek into the file, and try a few codecs to figure the right one.
     '''
-    utf_codecs=[]
+    utf_codecs = list()
     utf_codecs.append("utf-8")
     utf_codecs.append("ANSI")
     utf_codecs.append("utf-16")
@@ -272,7 +276,7 @@ def _find_codec(filename, npeekrows=20):
     the_codec = None
     while (the_codec is None):
         try:
-            with open(filename, 'r', encoding=utf_codecs[iunicode])  as f: # 'r' = read
+            with open(filename, 'r', encoding=utf_codecs[iunicode]) as f: # 'r' = read
                 for i_line, line in enumerate(f):
                     #print(line, line)
                     if (i_line >= npeekrows):
@@ -298,17 +302,17 @@ def _find_number_preamble_lines(filename, utf_codec, nskiprows=20):
     
     returns nskiprows, nheader
     '''
-    ncols=-1
-    ctype=None
-    nheader=0
+    ncols = -1
+    ctype = None
+    nheader = 0
     while (nskiprows>0):
-        df=None
+        df = None
         try:
             #print("Testing input...")
             df = _read_file(filename, utf_codec, nskiprows=nskiprows, nrows=10)
 
             #print(nskiprows,df.shape[1])
-            if (ncols==-1):
+            if (ncols == -1):
                 ncols = df.shape[1]
             elif (ncols != df.shape[1]):
                 #print("Column# change @ ", nskiprows)
@@ -316,7 +320,7 @@ def _find_number_preamble_lines(filename, utf_codec, nskiprows=20):
             if (ctype is None):
                 ctype = df[ncols-1].dtype
             elif (ctype != df[ncols-1].dtype):
-                nheader+=1
+                nheader += 1
                 #break
                 
         except pd.errors.ParserError:
@@ -350,22 +354,22 @@ def cull_gauge_file(filename, ncull=100, do_export=False):
 
     If ncull==1, no culling takes place.
 
-    If do_export==True, the (culled) frame is exported with a filename
+    If do_export==True, the (culled) frame is exported with a filename that is
     derived from the input filename.
 
     A (culled) dataframe is returned.
     '''
-    print("Reading input",filename,"...")
+    print("Reading input", filename, "...")
 
     # Find the codec (e.g. pure ASCII, UTF-8, etc.)
     # And the number of header lines.
-    print("    Peeking into input",filename,"...")
+    print("    Peeking into input", filename, "...")
     utf_codec = _find_codec(filename)
     nskiprows, nheader = _find_number_preamble_lines(filename, utf_codec)
     print("        codec:", utf_codec, " - # preamble lines:", nskiprows)
     
     # Read the header lins
-    hlines=[]
+    hlines = list()
     with open(filename, 'r', encoding=utf_codec)  as f: # 'r' = read
         for i_line, line in enumerate(f):
             hlines.append(line)
@@ -373,10 +377,10 @@ def cull_gauge_file(filename, ncull=100, do_export=False):
                 break
     
     # Now read the data for real. First header lines
-    print("    Reading full file",filename,"...")
-    read_header=None
-    if (nheader>0):
-        read_header=list(range(nheader))
+    print("    Reading full file", filename, "...")
+    read_header = None
+    if (nheader > 0):
+        read_header = list(range(nheader))
 
     # Then body
     df = _read_file(filename, utf_codec, nskiprows=nskiprows, nrows=None, header=read_header)
@@ -390,7 +394,7 @@ def cull_gauge_file(filename, ncull=100, do_export=False):
     df = _check_datetime_cols(df)
                          
     # Now do the cull (if requested)
-    if (ncull>1):
+    if (ncull > 1):
         print("    Reducing length..")
         df_culled = _cull_data(df, ncull=ncull)
         print("    Reduced length from", len(df), "to", len(df_culled))
@@ -402,7 +406,7 @@ def cull_gauge_file(filename, ncull=100, do_export=False):
         print("    Writing output...")
         outfile = filename + "_out.xlsx"
         writer = pd.ExcelWriter(outfile, engine='xlsxwriter')
-        df_culled.to_excel(writer, sheet_name='Sheet1', startrow = nskiprows)
+        df_culled.to_excel(writer, sheet_name='Sheet1', startrow=nskiprows)
         #workbook  = writer.book
         worksheet = writer.sheets['Sheet1']
         for i_line, text in enumerate(hlines):
@@ -416,14 +420,14 @@ def cull_gauge_file(filename, ncull=100, do_export=False):
 if (__name__ == "__main__"):
     n_arg = len(sys.argv)
     if (n_arg == 1):
-        print ("Utility to cull large gauge files to more manageable proportions")
-        print ("in the form of an Excel file. Usage:")
-        print ("    python ", sys.argv[0], " <filename>")
-        print ("The output Excel file is placed in the same folder as the input file")
+        print("Utility to cull large gauge files to more manageable proportions")
+        print("in the form of an Excel file. Usage:")
+        print("    python ", sys.argv[0], " <filename>")
+        print("The output Excel file is placed in the same folder as the input file")
         
     else:
-        for i,fname in enumerate(sys.argv):
-            if (i>0):
+        for i, fname in enumerate(sys.argv):
+            if (i > 0):
                 print("Processing ", fname)
                 try:
                     cull_gauge_file(fname, do_export=True)
