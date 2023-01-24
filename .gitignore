@@ -14,6 +14,7 @@
 *.pkl
 
 # For now, don't commit jupyter
+*.ipynb
 jupyter/
 *.ipynb
 
