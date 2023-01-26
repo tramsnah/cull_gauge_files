@@ -196,7 +196,7 @@ def _check_datetime_cols(df):
     return df
 
 @timeme
-def _cull_on_column(ds, ncull=100):
+def _cull_on_column(ds, dn = 1, ncull = 100):
     '''
     Return a bool array to be used for selection, based on column c in dataframe df
     In principle one in ncull is selected.
@@ -205,15 +205,86 @@ def _cull_on_column(ds, ncull=100):
     # Not a float format, just one in ncull
     if (ds.dtype != np.float64):
         keep = (ds.index % ncull == 0)
+        print("        1 in 100")
+        return keep
+
+    # Put series in a dataframe, so we can manipulate more easily
+    df = pd.DataFrame()
+    df["data"] = ds
+    
+    # Base grid
+    df["keep"] = (df.index % ncull ==0)
+    df["keep"].values[0] = True
+    df["keep"].values[-1] = True
+    
+    # Create cumulative absolute change.
+    # Look to changes dn on either side of point
+    df["dp"] = np.abs((ds.shift(-dn) - ds.shift(dn))/(2*dn)).fillna(0)
+    df["cum_dp"] = df["dp"].cumsum()
+    
+    # Figure out values at current grid points
+    df["cum_keep"] = np.nan
+    print(df)
+    df.loc[(df["keep"] == True), "cum_keep"] = df.loc[(df["keep"] == True), "cum_dp"]
+    
+    # Work out cumulative change since each grid point
+    df["cum_keep"] = df["cum_keep"].fillna(method="ffill")
+    df["d_cum_keep"] = df["cum_dp"] - df["cum_keep"]
+    
+    # Cumulative spacing we will look for
+    dcum = df["cum_dp"].values[-1] * ncull/len(df)
+
+    # Add points at this cumulative spacing
+    df["i_d_cum_keep"] = (df["d_cum_keep"]/dcum).astype(int)
+    df["d_i_d_cum_keep"] = df["i_d_cum_keep"] - df["i_d_cum_keep"].shift()
+    df["keep"] |= (df["d_i_d_cum_keep"]>0)
+    
+    # If count too low, don't end up with nothing
+    pmax = min(100*(1-1/len(df)), 99.9)
+
+    # Finally, check curvature. 
+    # Copy points at current selection, then interpolate
+    for i in range(5):
+        df["p_filt"] = np.nan
+        df.loc[(df["keep"] == True), "p_filt"] = df.loc[(df["keep"] == True), "data"]
+        df["p_filt"] = df["p_filt"].interpolate()
+
+        # Difference between actual and linear interpolation
+        df["dp_filt"] = np.abs(ds - df["p_filt"])
+        if (df["dp_filt"].max() < dcum):
+            break
+
+        # Where is it too large?
+        dp2 = np.percentile(df["dp_filt"], pmax)
+
+        # Include those
+        df["keep"] |= (df["dp_filt"] > dp2)
+    
+    # Return the reduced frame
+    return df["keep"]
+
+@timeme
+def _cull_on_column2(ds, ncull=100):
+    '''
+    Return a bool array to be used for selection, based on column c in dataframe df
+    In principle one in ncull is selected.
+    If the column is numerical, try to capture changes.
+    '''
+    # Not a float format, just one in ncull
+    if (ds.dtype != np.float64):
+        keep = (ds.index % ncull == 0)
+        print("        1 in 100")
         return keep
         
     # Estimate at which "dp" we need to make the cut
-    dp = np.abs(ds-ds.shift())
-    dp0 = np.percentile(dp.dropna(), 100*(1-1/ncull))
+    dp = np.abs(ds-ds.shift()).dropna()
+    print(dp)
+    dp0 = np.percentile(dp, 100*(1-1/ncull))
 
     # Lots of zeroes? Then ge for simple
     if (dp0 == 0.0):
         keep = (ds.index % ncull == 0)
+        print("        1 in 100")
         return keep
 
     # Cull on dp0, gradually increase if needed to achieve
@@ -225,6 +296,8 @@ def _cull_on_column(ds, ncull=100):
         keep |= keep.shift(-1) # Also point before
         dp0 *= 1.1
         n = keep.eq(True).sum()
+
+    print("        dp", dp0/1.1)
     return keep
 
 def _cull_data(df, ncull=100):
@@ -239,6 +312,7 @@ def _cull_data(df, ncull=100):
 
     keep = None
     for c in df.columns:
+        print("    ", c)
         lkeep = _cull_on_column(df[c], ncull=ncull)
         if (keep is None):
             keep = lkeep
@@ -430,7 +504,7 @@ if (__name__ == "__main__"):
             if (i > 0):
                 print("Processing ", fname)
                 try:
-                    cull_gauge_file(fname, do_export=True)
+                    cull_gauge_file(fname, ncull=25, do_export=True)
                 except Exception as e:
                     # If an exception occurs, continue, so the user gets feedback
                     print("******************************")
