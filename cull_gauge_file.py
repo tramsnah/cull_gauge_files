@@ -200,7 +200,7 @@ def _cull_on_column(ds, dn = 1, ncull = 100):
     '''
     Return a bool array to be used for selection, based on column c in dataframe df
     In principle one in ncull is selected.
-    If the column is numerical, try to capture changes.
+    If the column is numerical, try to capture changes (both steps and deviations from linear).
     '''
     # Not a float format, just one in ncull
     if (ds.dtype != np.float64):
@@ -224,8 +224,7 @@ def _cull_on_column(ds, dn = 1, ncull = 100):
     
     # Figure out values at current grid points
     df["cum_keep"] = np.nan
-    print(df)
-    df.loc[(df["keep"] == True), "cum_keep"] = df.loc[(df["keep"] == True), "cum_dp"]
+    df.loc[(df["keep"]), "cum_keep"] = df.loc[(df["keep"]), "cum_dp"]
     
     # Work out cumulative change since each grid point
     df["cum_keep"] = df["cum_keep"].fillna(method="ffill")
@@ -233,6 +232,12 @@ def _cull_on_column(ds, dn = 1, ncull = 100):
     
     # Cumulative spacing we will look for
     dcum = df["cum_dp"].values[-1] * ncull/len(df)
+
+    # Constant value column?
+    if (dcum == 0):
+        return df["keep"]
+
+    print("        delta <", dcum)
 
     # Add points at this cumulative spacing
     df["i_d_cum_keep"] = (df["d_cum_keep"]/dcum).astype(int)
@@ -244,9 +249,9 @@ def _cull_on_column(ds, dn = 1, ncull = 100):
 
     # Finally, check curvature. 
     # Copy points at current selection, then interpolate
-    for i in range(5):
+    for i in range(5): # To avoid eternal loop
         df["p_filt"] = np.nan
-        df.loc[(df["keep"] == True), "p_filt"] = df.loc[(df["keep"] == True), "data"]
+        df.loc[(df["keep"]), "p_filt"] = df.loc[(df["keep"]), "data"]
         df["p_filt"] = df["p_filt"].interpolate()
 
         # Difference between actual and linear interpolation
@@ -263,43 +268,6 @@ def _cull_on_column(ds, dn = 1, ncull = 100):
     # Return the reduced frame
     return df["keep"]
 
-@timeme
-def _cull_on_column2(ds, ncull=100):
-    '''
-    Return a bool array to be used for selection, based on column c in dataframe df
-    In principle one in ncull is selected.
-    If the column is numerical, try to capture changes.
-    '''
-    # Not a float format, just one in ncull
-    if (ds.dtype != np.float64):
-        keep = (ds.index % ncull == 0)
-        print("        1 in 100")
-        return keep
-        
-    # Estimate at which "dp" we need to make the cut
-    dp = np.abs(ds-ds.shift()).dropna()
-    print(dp)
-    dp0 = np.percentile(dp, 100*(1-1/ncull))
-
-    # Lots of zeroes? Then ge for simple
-    if (dp0 == 0.0):
-        keep = (ds.index % ncull == 0)
-        print("        1 in 100")
-        return keep
-
-    # Cull on dp0, gradually increase if needed to achieve
-    # the desired cull fraction
-    n = len(ds)
-    n0 = n/ncull
-    while(n > n0):
-        keep = (dp > dp0) # Point after
-        keep |= keep.shift(-1) # Also point before
-        dp0 *= 1.1
-        n = keep.eq(True).sum()
-
-    print("        dp", dp0/1.1)
-    return keep
-
 def _cull_data(df, ncull=100):
     '''
     Return a dataframe with reduced # of rows.
@@ -312,7 +280,7 @@ def _cull_data(df, ncull=100):
 
     keep = None
     for c in df.columns:
-        print("    ", c)
+        print("    culling column ", c)
         lkeep = _cull_on_column(df[c], ncull=ncull)
         if (keep is None):
             keep = lkeep
